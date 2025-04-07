@@ -388,8 +388,8 @@ def maybe_offload_to_cpu(module: torch.nn.Module) -> torch.nn.Module:
 
 _USE_ZERO_INFERENCE = False 
 def set_zero_inference(enable: bool) -> None:
-    global USE_ZERO_INFERENCE
-    _USE_ZERO_INFERENCE = enable 
+    global _USE_ZERO_INFERENCE
+    _USE_ZERO_INFERENCE = enable
 
 def is_zero_inference() -> bool:
     global _USE_ZERO_INFERENCE
