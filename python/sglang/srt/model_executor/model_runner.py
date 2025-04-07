@@ -172,7 +172,7 @@ class ModelRunner:
         set_cpu_offload_max_bytes(int(server_args.cpu_offload_gb * 1024**3))
 
         # ZeRO Inference
-        set_zero_inference(server_args,zero_inference)
+        set_zero_inference(server_args.zero_inference)
 
         # Get memory before model loading
         min_per_gpu_memory = self.init_torch_distributed()
