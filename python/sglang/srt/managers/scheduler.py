@@ -1030,7 +1030,7 @@ class Scheduler(
             f"#running-req: {running_bs}, "
             f"#queue-req: {len(self.waiting_queue)}, "
         )
-        logger.info(f)
+        # logger.info(f)
 
         if self.enable_metrics:
             cache_hit_rate = adder.log_hit_tokens / (
@@ -1086,7 +1086,7 @@ class Scheduler(
                 f"#queue-req: {len(self.waiting_queue)}, "
             )
 
-        logger.info(msg)
+        # logger.info(msg)
         if self.enable_metrics:
             self.stats.num_running_reqs = num_running_reqs
             self.stats.num_used_tokens = num_used

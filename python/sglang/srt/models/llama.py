@@ -49,8 +49,10 @@ from sglang.srt.model_loader.weight_utils import (
     kv_cache_scales_loader,
     maybe_remap_kv_scale_name,
 )
-from sglang.srt.utils import add_prefix, make_layers
+from sglang.srt.utils import add_prefix, make_layers, is_zero_inference
 from sglang.utils import get_exception_traceback
+import deepspeed
+from deepspeed.runtime.zero import DeepSpeedZeRoOffload
 
 logger = logging.getLogger(__name__)
 
@@ -344,6 +346,50 @@ class LlamaModel(nn.Module):
                 )
 
 
+def get_ds_config(dtype, config, offload_device, nvme_path, use_gds):
+    param_size = config.hidden_size * config.hidden_size
+    embedding_size = config.hidden_size * config.vocab_size    
+    ds_config = {
+        "zero_optimization": {
+            "stage": 3,
+            "stage3_prefetch_bucket_size": 2 * param_size,
+            "stage3_param_persistence_threshold": config.hidden_size,
+            "stage3_max_live_parameters": 2 * param_size,
+        },
+        "train_batch_size": 1
+    }
+
+    dtype_str = "bf16" if dtype == torch.bfloat16 else torch.float16
+    ds_config[dtype_str] = dict(
+        enabled=True
+    )
+
+    offload_dict = dict(
+        device=offload_device,
+        pin_memory=True,
+    )
+
+    if offload_device == "nvme":
+        nvme_dict = dict (
+            nvme_path = nvme_path,
+            buffer_count = 3 if use_gds else 5,
+            buffer_size = max(param_size, embedding_size),
+        )
+        offload_dict.update(nvme_dict)
+
+    ds_config["aio"] = dict(
+        block_size=16*1024*1024,
+        queue_depth=64,
+        intra_op_parallelism=8,
+        single_submit=False,
+        overlap_events=True,
+        use_gds=use_gds,
+    )
+
+    ds_config["zero_optimization"]["offload_param"] = offload_dict
+
+    return ds_config
+
 class LlamaForCausalLM(nn.Module):
     # BitandBytes specific attributes
     default_bitsandbytes_target_modules = [
@@ -375,9 +421,36 @@ class LlamaForCausalLM(nn.Module):
         super().__init__()
         self.config = config
         self.quant_config = quant_config
-        self.model = LlamaModel(
-            config, quant_config=quant_config, prefix=add_prefix("model", prefix)
+
+        model_dtype = getattr(config, "torch_dtype", torch.bfloat16)
+        remote_device = "nvme"
+
+        ds_config = get_ds_config(
+            dtype=model_dtype,
+            config=config,
+            offload_device=remote_device,
+            nvme_path="/local_nvme/sglang",
+            use_gds=False
         )
+
+        if is_zero_inference():
+            with deepspeed.zero.Init(
+                dtype=model_dtype,
+                remote_device=remote_device,
+                pin_memory=True,
+                config_dict_or_path=ds_config,
+                tensor_overrides=[]
+                ):
+                self.model = LlamaModel(
+                    config, quant_config=quant_config, prefix=add_prefix("model", prefix)
+                )
+            self.ds_offload = DeepSpeedZeRoOffload(self.model, timers=None, ds_config=ds_config)
+        else: 
+            self.model = LlamaModel(
+                config, quant_config=quant_config, prefix=add_prefix("model", prefix)
+            )
+
+
         # Llama 3.2 1B Instruct set tie_word_embeddings to True
         # Llama 3.1 8B Instruct set tie_word_embeddings to False
         if self.config.tie_word_embeddings:
@@ -507,7 +580,8 @@ class LlamaForCausalLM(nn.Module):
                     continue
                 param = params_dict[name]
                 weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
+                with deepspeed.zero.GatheredParameters([param], modifier_rank=0):
+                    weight_loader(param, loaded_weight, shard_id)
                 break
             else:
                 # Skip loading extra bias for GPTQ models.
@@ -521,7 +595,8 @@ class LlamaForCausalLM(nn.Module):
                     weight_loader = getattr(
                         param, "weight_loader", default_weight_loader
                     )
-                    weight_loader(param, loaded_weight)
+                    with deepspeed.zero.GatheredParameters([param], modifier_rank=0):
+                        weight_loader(param, loaded_weight)
                 else:
                     logger.warning(f"Parameter {name} not found in params_dict")
 

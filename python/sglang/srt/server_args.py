@@ -77,7 +77,8 @@ class ServerArgs:
     schedule_conservativeness: float = 1.0
     cpu_offload_gb: int = 0
     page_size: int = 1
-
+    zero_inference: bool = False
+    
     # Other runtime options
     tp_size: int = 1
     stream_interval: int = 1
@@ -609,6 +610,11 @@ class ServerArgs:
             type=int,
             default=ServerArgs.page_size,
             help="The number of tokens in a page.",
+        )
+        parser.add_argument(
+            "--zero-inference",
+            action="store_true",
+            help="Enable ZeRO-Inference offloading."
         )
 
         # Other runtime options

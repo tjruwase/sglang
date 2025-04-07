@@ -111,7 +111,7 @@ class Engine:
 
         # Allocate ports for inter-process communications
         port_args = PortArgs.init_new(server_args)
-        logger.info(f"{server_args=}")
+        # logger.info(f"{server_args=}")
 
         # Launch subprocesses
         tokenizer_manager, scheduler_info = _launch_subprocesses(

@@ -325,21 +325,17 @@ def throughput_test(
     if bench_args.extra_request_body:
         extra_request_body = json.loads(args.extra_request_body)
 
-    # Read dataset
-    input_requests = get_dataset(bench_args, tokenizer)
-
-    warmup_requests = sample_random_requests(
-        input_len=256,
-        output_len=16,
-        num_prompts=min(bench_args.num_prompts, 16),
-        range_ratio=1.0,
-        tokenizer=tokenizer,
-        dataset_path=bench_args.dataset_path,
-    )
-
     # Warm up
     if not bench_args.skip_warmup:
         logging.info("\nWarmup...")
+        warmup_requests = sample_random_requests(
+            input_len=256,
+            output_len=16,
+            num_prompts=min(bench_args.num_prompts, 16),
+            range_ratio=1.0,
+            tokenizer=tokenizer,
+            dataset_path=bench_args.dataset_path,
+        )
         throughput_test_once(
             backend_name=bench_args.backend,
             backend=backend,
@@ -351,6 +347,8 @@ def throughput_test(
         time.sleep(0.5)
 
     logging.info("\nBenchmark...")
+    # Read dataset
+    input_requests = get_dataset(bench_args, tokenizer)
     result = throughput_test_once(
         backend_name=bench_args.backend,
         backend=backend,

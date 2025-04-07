@@ -431,9 +431,11 @@ class LogitsProcessor(nn.Module):
             dp_gather_replicate(hidden_states, local_hidden_states, logits_metadata)
 
         if hasattr(lm_head, "weight"):
-            logits = torch.matmul(
-                hidden_states.to(lm_head.weight.dtype), lm_head.weight.T
-            )
+            import deepspeed
+            with deepspeed.zero.GatheredParameters([lm_head.weight]):
+                logits = torch.matmul(
+                    hidden_states.to(lm_head.weight.dtype), lm_head.weight.T
+                )
         else:
             # GGUF models
             logits = lm_head.quant_method.apply(lm_head, hidden_states, embedding_bias)
