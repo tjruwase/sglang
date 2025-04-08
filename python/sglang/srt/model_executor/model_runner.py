@@ -81,8 +81,8 @@ from sglang.srt.utils import (
     monkey_patch_vllm_gguf_config,
     set_cpu_offload_max_bytes,
     set_cuda_arch,
-    set_zero_inference,
 )
+from sglang.srt.deepspeed_utils import set_zero_inference
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ class ModelRunner:
         set_cpu_offload_max_bytes(int(server_args.cpu_offload_gb * 1024**3))
 
         # ZeRO Inference
-        set_zero_inference(server_args.zero_inference)
+        set_zero_inference(server_args.zero_inference_config)
 
         # Get memory before model loading
         min_per_gpu_memory = self.init_torch_distributed()

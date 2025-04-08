@@ -77,7 +77,7 @@ class ServerArgs:
     schedule_conservativeness: float = 1.0
     cpu_offload_gb: int = 0
     page_size: int = 1
-    zero_inference: bool = False
+    zero_inference_config: Optional[str] = None
     
     # Other runtime options
     tp_size: int = 1
@@ -612,8 +612,9 @@ class ServerArgs:
             help="The number of tokens in a page.",
         )
         parser.add_argument(
-            "--zero-inference",
-            action="store_true",
+            "--zero-inference-config",
+            type=str,
+            default=ServerArgs.zero_inference_config,
             help="Enable ZeRO-Inference offloading."
         )
 

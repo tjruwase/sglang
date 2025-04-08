@@ -385,17 +385,6 @@ def maybe_offload_to_cpu(module: torch.nn.Module) -> torch.nn.Module:
 
     return module
 
-
-_USE_ZERO_INFERENCE = False 
-def set_zero_inference(enable: bool) -> None:
-    global _USE_ZERO_INFERENCE
-    _USE_ZERO_INFERENCE = enable
-
-def is_zero_inference() -> bool:
-    global _USE_ZERO_INFERENCE
-    return _USE_ZERO_INFERENCE
-
-
 class LayerFn(Protocol):
 
     def __call__(self, layer_id: int, prefix: str) -> torch.nn.Module: ...
