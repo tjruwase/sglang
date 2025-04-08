@@ -1575,7 +1575,8 @@ class DeepseekV2ForCausalLM(nn.Module):
                     continue
                 param = params_dict[name]
                 weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
+                with deepspeed.zero.GatheredParameters([param], modifier_rank=0):
+                    weight_loader(param, loaded_weight, shard_id)
                 break
             else:
                 for mapping in expert_params_mapping:
@@ -1585,13 +1586,14 @@ class DeepseekV2ForCausalLM(nn.Module):
                     name = name.replace(weight_name, param_name)
                     param = params_dict[name]
                     weight_loader = param.weight_loader
-                    weight_loader(
-                        param,
-                        loaded_weight,
-                        name,
-                        shard_id=shard_id,
-                        expert_id=expert_id,
-                    )
+                    with deepspeed.zero.GatheredParameters([param], modifier_rank=0):
+                        weight_loader(
+                            param,
+                            loaded_weight,
+                            name,
+                            shard_id=shard_id,
+                            expert_id=expert_id,
+                        )
                     break
                 else:
                     # Skip loading extra bias for GPTQ models.
@@ -1602,7 +1604,8 @@ class DeepseekV2ForCausalLM(nn.Module):
                     weight_loader = getattr(
                         param, "weight_loader", default_weight_loader
                     )
-                    weight_loader(param, loaded_weight)
+                    with deepspeed.zero.GatheredParameters([param], modifier_rank=0):
+                        weight_loader(param, loaded_weight)
 
         self.post_load_weights()
 
