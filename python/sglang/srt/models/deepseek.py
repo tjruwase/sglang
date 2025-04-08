@@ -48,6 +48,10 @@ from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.utils import add_prefix
 
+from sglang.srt.deepspeed_utils import is_zero_inference, get_ds_config
+
+import deepspeed
+from deepspeed.runtime.zero import DeepSpeedZeRoOffload
 
 class DeepseekMLP(nn.Module):
 
@@ -404,9 +408,28 @@ class DeepseekForCausalLM(nn.Module):
         super().__init__()
         self.config = config
         self.quant_config = quant_config
-        self.model = DeepseekModel(
-            config, quant_config, prefix=add_prefix("model", prefix)
-        )
+
+        if is_zero_inference():
+            model_dtype = getattr(config, "torch_dtype", torch.bfloat16)
+            ds_config = get_ds_config(
+                model_dtype=model_dtype,
+                model_hidden_size=config.hidden_size,
+                model_vocab_size=config.vocab_size
+            )
+            with deepspeed.zero.Init(
+                dtype=model_dtype,
+                config_dict_or_path=ds_config,
+                tensor_overrides=[]
+                ):
+                self.model = DeepseekModel(
+                    config, quant_config, prefix=add_prefix("model", prefix)
+                )
+            self.ds_offload = DeepSpeedZeRoOffload(self.model, timers=None, ds_config=ds_config)
+        else:
+            self.model = DeepseekModel(
+                config, quant_config, prefix=add_prefix("model", prefix)
+            )
+
         self.lm_head = ParallelLMHead(
             config.vocab_size,
             config.hidden_size,
