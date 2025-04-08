@@ -73,6 +73,10 @@ from sglang.srt.managers.schedule_batch import global_server_args_dict
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.utils import DeepEPMode, add_prefix, is_cuda, is_hip
+from sglang.srt.deepspeed_utils import is_zero_inference, get_ds_config
+
+import deepspeed
+from deepspeed.runtime.zero import DeepSpeedZeRoOffload
 
 _is_hip = is_hip()
 _is_cuda = is_cuda()
@@ -1349,9 +1353,28 @@ class DeepseekV2ForCausalLM(nn.Module):
                 f"Shared experts fusion optimization is default enabled in DeepSeek V3/R1, and n_share_experts_fusion is set to {self.tp_size}. You can tune it by setting --n_share_experts_fusion or disable it by setting --disable_shared_experts_fusion."
             )
 
-        self.model = DeepseekV2Model(
-            config, quant_config, prefix=add_prefix("model", prefix)
-        )
+        if is_zero_inference():
+            model_dtype = getattr(config, "torch_dtype", torch.bfloat16)
+            ds_config = get_ds_config(
+                model_dtype=model_dtype,
+                model_hidden_size=config.hidden_size,
+                model_vocab_size=config.vocab_size
+            )
+            with deepspeed.zero.Init(
+                dtype=model_dtype,
+                config_dict_or_path=ds_config,
+                tensor_overrides=[]
+                ):
+                self.model = DeepseekV2Model(
+                    config, quant_config, prefix=add_prefix("model", prefix)
+                )
+            self.ds_offload = DeepSpeedZeRoOffload(self.model, timers=None, ds_config=ds_config)
+        else:
+            self.model = DeepseekV2Model(
+                config, quant_config, prefix=add_prefix("model", prefix)
+            )
+
+
         self.lm_head = ParallelLMHead(
             config.vocab_size,
             config.hidden_size,
